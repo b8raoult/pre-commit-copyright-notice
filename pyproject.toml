@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=60", "setuptools-scm>=8.0"]
+
+[project]
+name = "pre-commit-copyright-notice"
+dynamic = ["version"]
+description = "A pre-commit hook to check that copyright notices are present in source files and that they are up to date."
+
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+
+dependencies = []
+
+[project.scripts]
+copyright-notice = "pre_commit_copyright_notice.__main__:main"
+
+[tool.setuptools_scm]
+version_file = "src/pre_commit_copyright_notice/_version.py"

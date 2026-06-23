@@ -1,0 +1,5 @@
+-   id: copyright-notice
+    name: Check copyright notice
+    entry: python3 -m pre_commit_copyright_notice
+    language: python
+    types: [python]
