@@ -145,7 +145,74 @@ def add_notice(path, years, holder, license_text=None):
         f.write(new_content)
 
 
-def expand_paths(paths, extensions):
+def glob_to_regex(pattern):
+    """Translate a ruff/globset-style glob into a regex body (no anchors).
+
+    Semantics: ``*`` matches within a path segment, ``**`` spans segments,
+    ``?`` matches a single non-separator char, and ``[...]`` is a char class.
+    A trailing ``/`` is treated as "this directory and everything under it".
+    """
+    if pattern.endswith('/'):
+        pattern += '**'
+    i, n = 0, len(pattern)
+    out = []
+    while i < n:
+        c = pattern[i]
+        if c == '*':
+            if i + 1 < n and pattern[i + 1] == '*':
+                if i + 2 < n and pattern[i + 2] == '/':
+                    out.append('(?:[^/]*/)*')  # **/  -> zero or more segments
+                    i += 3
+                else:
+                    out.append('.*')           # ** or trailing /**
+                    i += 2
+            else:
+                out.append('[^/]*')            # * -> within a segment
+                i += 1
+        elif c == '?':
+            out.append('[^/]')
+            i += 1
+        elif c == '[':
+            j = i + 1
+            if j < n and pattern[j] in ('!', '^'):
+                j += 1
+            if j < n and pattern[j] == ']':
+                j += 1
+            while j < n and pattern[j] != ']':
+                j += 1
+            if j >= n:
+                out.append(r'\[')              # no closing bracket: literal '['
+                i += 1
+            else:
+                inner = pattern[i + 1:j]
+                if inner.startswith('!'):
+                    inner = '^' + inner[1:]
+                out.append('[' + inner + ']')
+                i = j + 1
+        else:
+            out.append(re.escape(c))
+            i += 1
+    return ''.join(out)
+
+
+def compile_excludes(patterns):
+    """Compile glob patterns into anchored regexes.
+
+    Each glob matches a trailing portion of a path that begins at a segment
+    boundary, so a slash-less pattern (e.g. ``foo_*.py``) matches a basename
+    anywhere in the tree and a relative pattern (e.g. ``docs/**/*.py``) matches
+    that path under any parent directory.
+    """
+    return [re.compile(r'(?:^|/)' + glob_to_regex(p) + r'$') for p in patterns]
+
+
+def is_excluded(path, excludes):
+    """Return True if the path matches any of the exclude globs."""
+    norm = path.replace('\\', '/')
+    return any(pat.search(norm) for pat in excludes)
+
+
+def expand_paths(paths, extensions, excludes=()):
     """Expand directory arguments to individual files, skipping hidden directories."""
     result = []
     for path in paths:
@@ -156,13 +223,15 @@ def expand_paths(paths, extensions):
                     continue
                 if any(part.startswith('.') for part in f.relative_to(p).parts):
                     continue
+                if is_excluded(str(f), excludes):
+                    continue
                 suffix = f.suffix.lower()
                 if extensions is not None:
                     if suffix in extensions:
                         result.append(str(f))
                 elif suffix in COMMENT_CHARS:
                     result.append(str(f))
-        else:
+        elif not is_excluded(path, excludes):
             result.append(path)
     return result
 
@@ -185,6 +254,13 @@ def main():
                         help='Do not fail on stale copyright years')
     parser.add_argument('--extensions', metavar='EXT[,EXT...]',
                         help='Only check files with these extensions, comma-separated (e.g. .py,.js)')
+    parser.add_argument('--exclude', metavar='GLOB', action='append', default=[],
+                        help='Glob matched against each file path; matching files are skipped. '
+                             '"*" stays within a path segment, "**" spans segments. May be given '
+                             'multiple times (e.g. --exclude=docs/**/*.py --exclude=build/).')
+    parser.add_argument('--exit-non-zero-on-fix', action='store_true',
+                        help='Exit with a non-zero status when --fix changes any file '
+                             '(useful in pre-commit so a fixed file fails the hook).')
     parser.add_argument('--license', metavar='FILE_OR_URL',
                         help='Path or URL to a plain-text license block (no comment characters)')
     parser.add_argument('files', nargs='+', help='Files or directories to check')
@@ -195,6 +271,11 @@ def main():
         extensions = {e.strip() if e.strip().startswith('.') else f'.{e.strip()}'
                       for e in args.extensions.split(',')}
 
+    try:
+        excludes = compile_excludes(args.exclude)
+    except re.error as e:
+        parser.error(f'invalid --exclude glob: {e}')
+
     license_text = None
     if args.license:
         license_text = load_license_text(args.license)
@@ -202,8 +283,9 @@ def main():
     pattern = build_pattern(args.holder, no_year=args.no_year)
     any_pat = ANY_COPYRIGHT_PATTERN_NO_YEAR if args.no_year else ANY_COPYRIGHT_PATTERN
     failed = False
+    fixed = False
 
-    for path in expand_paths(args.files, extensions):
+    for path in expand_paths(args.files, extensions, excludes):
         if extensions and Path(path).suffix.lower() not in extensions:
             continue
 
@@ -233,6 +315,7 @@ def main():
                 new_content = content[:any_m.start()] + replacement + content[any_m.end():]
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
+                fixed = True
                 print(f'Fixed copyright holder in {path}.')
             else:
                 print(f'Wrong copyright holder in {path}: '
@@ -243,6 +326,7 @@ def main():
             if args.fix:
                 years = None if args.no_year else args.years
                 add_notice(path, years, args.holder, license_text)
+                fixed = True
                 print(f'Added copyright notice to {path}.')
             else:
                 print(f'Copyright notice missing in {path}.')
@@ -256,11 +340,15 @@ def main():
                 new_content = update_year_in_content(content, m)
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(new_content)
+                fixed = True
                 print(f'Updated copyright year to {new_year} in {path}.')
             else:
                 print(f'Copyright year is stale in {path}.')
                 print(f'Expected end year {CURRENT_YEAR}, found: {m.group(0)}')
                 failed = True
+
+    if fixed and args.exit_non_zero_on_fix:
+        failed = True
 
     sys.exit(1 if failed else 0)
 

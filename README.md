@@ -32,6 +32,9 @@ copyright-notice --holder "MyOrganisation" --fix src/
 # Check only Python and JavaScript files
 copyright-notice --holder "MyOrganisation" --extensions .py,.js src/
 
+# Skip files whose path matches a glob (repeat --exclude for several patterns)
+copyright-notice --holder "MyOrganisation" --exclude 'docs/**/*.py' --exclude 'build/' src/
+
 # Ignore stale years (only check that a notice exists with the right holder)
 copyright-notice --holder "MyOrganisation" --ignore-stale src/
 
@@ -41,7 +44,37 @@ copyright-notice --holder "MyOrganisation" --no-year src/
 
 When a **directory** is passed, the tool walks it recursively and checks every
 file whose extension is in the known list (or in `--extensions` if given).
-Hidden directories (names starting with `.`) are skipped automatically.
+Hidden directories (names starting with `.`) are skipped automatically, as are
+any files whose path matches an `--exclude` glob.
+
+## Excluding files
+
+`--exclude` takes a **glob pattern** (the same style as
+[ruff](https://docs.astral.sh/ruff/settings/#exclude), via Rust's `globset`)
+matched against each file path:
+
+| Token | Matches |
+|-------|---------|
+| `*` | any run of characters **within** a single path segment (does not cross `/`) |
+| `**` | any number of path segments (crosses `/`) |
+| `?` | a single non-`/` character |
+| `[abc]`, `[!abc]` | a character class / negated class |
+| trailing `/` | the named directory **and everything under it** |
+
+A pattern **without** a slash matches a *basename* anywhere in the tree
+(`*_pb2.py` excludes `pb2` files at any depth). A pattern **with** a slash
+matches that relative path under any parent directory (`docs/**/*.py`).
+
+Give `--exclude` multiple times to exclude several patterns. In
+`.pre-commit-config.yaml`, pass each as its own argument:
+
+```yaml
+- id: copyright-notice
+  args:
+  - "--holder=PackageName contributors"
+  - "--exclude=docs/**/*.py"
+  - "--exclude=build/"
+```
 
 ## Options
 
@@ -53,6 +86,8 @@ Hidden directories (names starting with `.`) are skipped automatically.
 | `--no-year` | Omit the year from notices entirely; year staleness is never checked. |
 | `--ignore-stale` | Do not fail on stale copyright years; only check that a notice is present with the correct holder. |
 | `--extensions .EXT[,.EXT...]` | Comma-separated list of file extensions to check (e.g. `.py,.js`). |
+| `--exclude GLOB` | Glob matched against each file path; matching files are skipped. May be given multiple times. See [Excluding files](#excluding-files). |
+| `--exit-non-zero-on-fix` | Exit with a non-zero status when `--fix` changes any file. Use in pre-commit so a run that rewrote files fails the hook (and the fixed files are re-staged on the next run). |
 | `--license FILE_OR_URL` | Path or URL to a plain-text license block (no comment characters). |
 
 ## Year formats
@@ -120,6 +155,12 @@ When `--no-year` is set the tool:
 - Never reports or fixes stale years.
 
 ## Adding missing notices (`--fix`)
+
+By default `--fix` exits `0` once it has rewritten the failing files. In
+pre-commit you usually want the hook to **fail** on the run that made changes
+(so the commit stops and the rewritten files are staged for the next attempt) —
+add `--exit-non-zero-on-fix` for that behaviour. The exit status is non-zero
+only when at least one file was actually changed.
 
 The tool writes a notice at the top of each failing file (after a shebang or
 encoding declaration if present), followed by a blank line:
