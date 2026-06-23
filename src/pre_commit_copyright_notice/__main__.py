@@ -176,8 +176,9 @@ def main():
                              'Default: current year. Ignored when --no-year is set.')
     parser.add_argument('--holder', default='The copyright holder',
                         help='Copyright holder name')
-    parser.add_argument('--add', action='store_true',
-                        help='Add missing notices and update stale years instead of reporting')
+    parser.add_argument('--fix', action='store_true',
+                        help='Fix files in place: add missing notices, correct wrong holders, '
+                             'and update stale years instead of reporting')
     parser.add_argument('--no-year', action='store_true',
                         help='Omit the year from copyright notices; do not check year staleness')
     parser.add_argument('--ignore-stale', action='store_true',
@@ -223,7 +224,7 @@ def main():
 
         if holder_mismatch:
             found_holder = any_m.group('found_holder').rstrip('. \t')
-            if args.add:
+            if args.fix:
                 if args.no_year:
                     replacement = f'(C) Copyright {args.holder}.'
                 else:
@@ -239,7 +240,7 @@ def main():
                 failed = True
 
         elif not m:
-            if args.add:
+            if args.fix:
                 years = None if args.no_year else args.years
                 add_notice(path, years, args.holder, license_text)
                 print(f'Added copyright notice to {path}.')
@@ -251,7 +252,7 @@ def main():
 
         elif not args.no_year and not args.ignore_stale and not year_is_current(m):
             new_year = updated_year_str(m)
-            if args.add:
+            if args.fix:
                 new_content = update_year_in_content(content, m)
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(new_content)

@@ -27,7 +27,7 @@ copyright-notice --holder "MyOrganisation" src/
 copyright-notice --holder "MyOrganisation" myfile.py
 
 # Add missing notices and fix stale years in a whole directory
-copyright-notice --holder "MyOrganisation" --add src/
+copyright-notice --holder "MyOrganisation" --fix src/
 
 # Check only Python and JavaScript files
 copyright-notice --holder "MyOrganisation" --extensions .py,.js src/
@@ -49,7 +49,7 @@ Hidden directories (names starting with `.`) are skipped automatically.
 |--------|-------------|
 | `--years YEARS` | Year(s) for new notices. Accepted formats: `YYYY`, `YYYY-`, `YYYY-YYYY`, `YYYY, YYYY, ...`. Default: current year. Ignored when `--no-year` is set. |
 | `--holder NAME` | Copyright holder name to check for. Default: `The copyright holder`. |
-| `--add` | Instead of failing, insert or fix the copyright notice in each file. |
+| `--fix` | Fix files in place instead of failing: insert missing notices, correct wrong holders, and update stale years. |
 | `--no-year` | Omit the year from notices entirely; year staleness is never checked. |
 | `--ignore-stale` | Do not fail on stale copyright years; only check that a notice is present with the correct holder. |
 | `--extensions .EXT[,.EXT...]` | Comma-separated list of file extensions to check (e.g. `.py,.js`). |
@@ -67,7 +67,7 @@ The following year formats are accepted in source files and in `--years`:
 | Comma-separated list | `2020, 2023, 2026` | Discrete years; last one checked for staleness |
 
 The `--years` value is not matched literally — any file containing
-`Copyright <any-valid-year-format> <holder>` passes. When `--add` updates a
+`Copyright <any-valid-year-format> <holder>` passes. When `--fix` updates a
 stale year in the file it preserves the existing format (e.g. a closed range
 stays a closed range with an updated end year; a comma list gets the current
 year appended).
@@ -77,7 +77,7 @@ year appended).
 ### Holder mismatch
 
 If a file already contains a `(C) Copyright` line but with a **different**
-holder, the tool fails (or fixes with `--add`). Only the **first** `(C)`
+holder, the tool fails (or fixes with `--fix`). Only the **first** `(C)`
 block in the file is checked — additional blocks are ignored, as they may be
 present intentionally (e.g. third-party code with a different licence header).
 
@@ -85,7 +85,7 @@ present intentionally (e.g. third-party code with a different licence header).
 Wrong copyright holder in src/foo.py: found "Other Org", expected "MyOrganisation".
 ```
 
-With `--add` the wrong holder (and stale year, if any) is corrected in-place.
+With `--fix` the wrong holder (and stale year, if any) is corrected in-place.
 
 ### Missing notice
 
@@ -94,7 +94,7 @@ Copyright notice missing in src/bar.py.
 Expected: Copyright 2026 MyOrganisation
 ```
 
-With `--add` the notice is inserted at the top of the file (after a shebang
+With `--fix` the notice is inserted at the top of the file (after a shebang
 or encoding declaration if present), followed by a blank line.
 
 ### Stale year
@@ -104,7 +104,7 @@ Copyright year is stale in src/baz.py.
 Expected end year 2026, found: Copyright 2024 MyOrganisation
 ```
 
-With `--add` the year is updated in-place. Pass `--ignore-stale` to suppress
+With `--fix` the year is updated in-place. Pass `--ignore-stale` to suppress
 this check, or `--no-year` to omit years from notices altogether.
 
 ### No-year mode (`--no-year`)
@@ -113,13 +113,13 @@ When `--no-year` is set the tool:
 
 - Accepts files that have `(C) Copyright Holder.` (no year) **or** any
   year-bearing format — either is considered valid as long as the holder matches.
-- Inserts notices without a year when `--add` is used:
+- Inserts notices without a year when `--fix` is used:
   ```
   # (C) Copyright MyOrganisation.
   ```
 - Never reports or fixes stale years.
 
-## Adding missing notices (`--add`)
+## Adding missing notices (`--fix`)
 
 The tool writes a notice at the top of each failing file (after a shebang or
 encoding declaration if present), followed by a blank line:
@@ -172,7 +172,7 @@ Hook configuration:
     - "PackageName contributors"
     - "--license"
     - "LICENSE_HEADER.txt"
-    - "--add"
+    - "--fix"
 ```
 
 A Python file missing a notice would become:
